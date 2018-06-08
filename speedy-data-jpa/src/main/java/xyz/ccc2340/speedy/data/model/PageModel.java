@@ -15,7 +15,7 @@ public class PageModel {
     private List<Object> data;
     private int index;
     private int cpp;
-    private int totalCount;
+    private long totalCount;
     private int first;
     private int last;
 

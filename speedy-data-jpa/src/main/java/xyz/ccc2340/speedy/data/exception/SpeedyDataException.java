@@ -1,5 +1,7 @@
 package xyz.ccc2340.speedy.data.exception;
 
+import org.springframework.dao.DataAccessException;
+
 /**
  * @Description
  * @Author chenguangxue

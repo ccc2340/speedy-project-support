@@ -1,6 +1,6 @@
 package xyz.ccc2340.speedy.data.repository.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import xyz.ccc2340.speedy.common.util.ReflectUtils;
 import xyz.ccc2340.speedy.data.exception.SpeedyDataException;
 import xyz.ccc2340.speedy.data.model.PageModel;
 import xyz.ccc2340.speedy.data.model.QueryCondition;
@@ -13,6 +13,9 @@ import javax.persistence.PersistenceContext;
 import javax.persistence.TypedQuery;
 import javax.persistence.criteria.*;
 import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,7 +26,6 @@ import java.util.Optional;
  */
 public class CustomBaseRepositoryImpl implements CustomBaseRepository {
 
-    @Autowired
     @PersistenceContext
     private EntityManager em;
 
@@ -77,23 +79,30 @@ public class CustomBaseRepositoryImpl implements CustomBaseRepository {
 
     @Override
     public <T> PageModel pageByObject(T example, int index, int cpp) {
-        SqlQueryParameter sqlQueryParameter = SqlQueryParameter.Builder.start().withExample(example).initPageInfo(index, cpp).complete();
+        SqlQueryParameter sqlQueryParameter = SqlQueryParameter.Builder.
+                start().withExample(example).initPageInfo(index, cpp).complete();
         return criteriaDataQuery(sqlQueryParameter);
     }
 
     @Override
     public <T> PageModel pageByObject(T example, int index, int cpp, Order... orders) {
-        return null;
+        SqlQueryParameter sqlQueryParameter = SqlQueryParameter.Builder.
+                start().withExample(example).initPageInfo(index, cpp).withOrders(orders).complete();
+        return criteriaDataQuery(sqlQueryParameter);
     }
 
     @Override
     public <T> PageModel pageByCondition(QueryCondition condition, int index, int cpp) {
-        return null;
+        SqlQueryParameter sqlQueryParameter = SqlQueryParameter.Builder.
+                start().withCondition(condition).initPageInfo(index, cpp).complete();
+        return criteriaDataQuery(sqlQueryParameter);
     }
 
     @Override
     public <T> PageModel pageByCondition(QueryCondition condition, int index, int cpp, Order... orders) {
-        return null;
+        SqlQueryParameter sqlQueryParameter = SqlQueryParameter.Builder.
+                start().withCondition(condition).initPageInfo(index, cpp).withOrders(orders).complete();
+        return criteriaDataQuery(sqlQueryParameter);
     }
 
     /* 将查询条件综合起来执行数据查询操作 */
@@ -115,7 +124,7 @@ public class CustomBaseRepositoryImpl implements CustomBaseRepository {
         if (queryParameter.isPage()) {
             dataQuery.setFirstResult(queryParameter.getOffset()).setMaxResults(queryParameter.getCpp());
             count = criteriaCountQuery(root, predicates);
-            pm.setTotalCount(count.intValue());
+            pm.setTotalCount(count);
             pm.setIndex(queryParameter.getIndex());
             pm.setCpp(queryParameter.getCpp());
         }
@@ -141,12 +150,13 @@ public class CustomBaseRepositoryImpl implements CustomBaseRepository {
 
     // 提取条件数据
     private Predicate[] predicate(SqlQueryParameter parameter, CriteriaBuilder sqlBuilder, Root<?> root) {
+        Object object = parameter.getParameterObject();
         switch (parameter.getParameterType()) {
             case EXAMPLE: {
-                return examplePredicate(parameter.getParameterObject());
+                return examplePredicate(object, sqlBuilder, root);
             }
             case CONDITION: {
-                return conditionPredicate(parameter.getParameterObject());
+                return conditionPredicate(object, sqlBuilder, root);
             }
             default:
                 return new Predicate[0];
@@ -154,12 +164,22 @@ public class CustomBaseRepositoryImpl implements CustomBaseRepository {
     }
 
     // 对应实体类作为条件对象，则将非空的值全部提取出，使用eq
-    private Predicate[] examplePredicate(Object object) {
-        return new Predicate[0];
+    private Predicate[] examplePredicate(Object object, CriteriaBuilder sqlBuilder, Root<?> root) {
+        Field[] fields = object.getClass().getDeclaredFields();
+        List<Predicate> predicates = new ArrayList<>(fields.length);
+        for (Field f : fields) {
+            Object fieldValue = ReflectUtils.directGetFieldValue(object, f);
+            if (fieldValue != null) {
+                String fieldName = f.getName();
+                Predicate predicate = sqlBuilder.equal(root.get(fieldName), fieldValue);
+                predicates.add(predicate);
+            }
+        }
+        return predicates.toArray(new Predicate[]{});
     }
 
     // 对应条件类作为条件对象，则将非空的值全部提取出，按照值的方式使用比较类型
-    private Predicate[] conditionPredicate(Object object) {
+    private Predicate[] conditionPredicate(Object object, CriteriaBuilder sqlBuilder, Root<?> root) {
         return new Predicate[0];
     }
 }
